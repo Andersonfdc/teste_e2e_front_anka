@@ -1,39 +1,27 @@
+import { loginPage } from "../../support/pages/login.page";
+import { otpPage } from "../../support/pages/otp.page";
+import { homePage } from "../../support/pages/home.page";
+import { sidebarPage } from "../../support/pages/sidebar.page";
+
 const apiBase = "http://localhost:3333/api/v1";
 const testUser = {
   email: "murilo@ankatech.com.br",
   password: "password",
 };
 
-describe("Auth - Login", () => {
+describe("Autenticação - Login", () => {
   beforeEach(() => {
-    cy.visit("/auth/login");
+    loginPage.visit();
   });
 
-  it("deve validar campos obrigatórios", () => {
-    cy.get('input[name="email"]').type("a").clear();
-    cy.get('input[name="password"]').type("a").clear();
-
-    cy.submitCurrentForm();
-
-    cy.location("search").then((search) => {
-      if (search.includes("email=&password=")) {
-        cy.visit("/auth/login");
-        cy.get('input[name="email"]').type("a").clear();
-        cy.get('input[name="password"]').type("a").clear();
-        cy.submitCurrentForm();
-      }
-    });
-
-    cy.get('input[name="email"]').should("have.attr", "aria-invalid", "true");
-    cy.get('input[name="password"]').should("have.attr", "aria-invalid", "true");
-    cy.contains('[data-slot="form-message"]', "Email inválido").should("be.visible");
-    cy.contains(
-      '[data-slot="form-message"]',
-      "Senha deve ter pelo menos 6 caracteres",
-    ).should("be.visible");
+  it("Dado a tela de login, Quando submeter sem preencher, Então deve exibir erros obrigatórios", () => {
+    loginPage.ensureHydrated();
+    loginPage.submit();
+    loginPage.resubmitIfNativeSubmitHappened();
+    loginPage.assertRequiredFieldErrors();
   });
 
-  it("deve enviar login e redirecionar para OTP quando API retorna sucesso", () => {
+  it("Dado credenciais válidas, Quando enviar o login, Então deve redirecionar para OTP", () => {
     cy.intercept("POST", "**/auth/login", (req) => {
       expect(req.headers).to.have.property("x-api-key");
       expect(req.body).to.deep.equal({
@@ -51,18 +39,14 @@ describe("Auth - Login", () => {
       });
     }).as("loginRequest");
 
-    cy.fillLoginForm({
-      email: "murilo@ankatech.com.br",
-      password: "password",
-    });
-
-    cy.submitCurrentForm();
+    loginPage.fillCredentials(testUser);
+    loginPage.submit();
 
     cy.wait("@loginRequest").its("response.statusCode").should("eq", 200);
     cy.url().should("include", "/auth/login/otp/123");
   });
 
-  it("deve exibir mensagem de erro quando credenciais forem inválidas", () => {
+  it("Dado credenciais inválidas, Quando enviar o login, Então deve exibir erro de autenticação", () => {
     cy.intercept("POST", "**/auth/login", {
       statusCode: 401,
       body: {
@@ -71,18 +55,18 @@ describe("Auth - Login", () => {
       },
     }).as("loginUnauthorized");
 
-    cy.fillLoginForm({
+    loginPage.fillCredentials({
       email: "murilo@ankatech.com.br",
       password: "wrong-password",
     });
 
-    cy.submitCurrentForm();
+    loginPage.submit();
 
     cy.wait("@loginUnauthorized").its("response.statusCode").should("eq", 401);
-    cy.contains("Credenciais inválidas").should("be.visible");
+    loginPage.assertUnauthorizedMessage();
   });
 
-  it("deve concluir autenticação sem depender do OTP dinâmico do backend", () => {
+  it("Dado challengeId ativo, Quando capturar OTP no banco e confirmar, Então deve autenticar e ir para Home", () => {
     cy.request({
       method: "POST",
       url: `${apiBase}/auth/login`,
@@ -116,17 +100,17 @@ describe("Auth - Login", () => {
 
         cy.intercept("POST", "**/auth/otp/verify").as("verifyOtpReal");
 
-        cy.visit(`/auth/login/otp/${challengeId}`);
-        cy.fillOtpCode(String(otpCode));
-        cy.submitCurrentForm();
+        otpPage.visit(challengeId);
+        otpPage.fillCode(otpCode);
+        otpPage.submit();
 
         cy.wait("@verifyOtpReal").its("response.statusCode").should("eq", 200);
-        cy.url().should("include", "/home");
+        homePage.assertLoaded();
       });
     });
   });
 
-  it("deve realizar logout após login com OTP real", () => {
+  it("Dado usuário autenticado, Quando clicar em Sair, Então deve limpar sessão e voltar para login", () => {
     cy.request({
       method: "POST",
       url: `${apiBase}/auth/login`,
@@ -144,15 +128,15 @@ describe("Auth - Login", () => {
       cy.intercept("GET", "**/auth/me").as("getMeForLogout");
 
       cy.task("getOtpCode", { challengeId }).then((otpCode) => {
-        cy.visit(`/auth/login/otp/${challengeId}`);
-        cy.fillOtpCode(String(otpCode));
-        cy.submitCurrentForm();
+        otpPage.visit(challengeId);
+        otpPage.fillCode(otpCode);
+        otpPage.submit();
 
         cy.wait("@verifyOtpForLogout").its("response.statusCode").should("eq", 200);
         cy.wait("@getMeForLogout").its("response.statusCode").should("eq", 200);
-        cy.url().should("include", "/home");
+        homePage.assertLoaded();
 
-        cy.contains("button", "Sair").should("be.visible").click({ force: true });
+        sidebarPage.clickLogout();
         cy.url().should("include", "/auth/login");
 
         cy.getCookie("token").should("not.exist");
@@ -163,10 +147,10 @@ describe("Auth - Login", () => {
   });
 });
 
-describe("Auth - Login (Responsividade)", () => {
-  it("deve renderizar corretamente em viewport mobile", () => {
+describe("Autenticação - Login Responsivo", () => {
+  it("Dado viewport mobile, Quando abrir login, Então deve renderizar elementos essenciais", () => {
     cy.viewport(390, 844);
-    cy.visit("/auth/login");
+    loginPage.visit();
 
     cy.contains("Login").should("be.visible");
     cy.get('input[type="email"]').should("be.visible");
@@ -175,9 +159,9 @@ describe("Auth - Login (Responsividade)", () => {
     cy.get("img[alt='Vertical Anka Logo']").should("not.be.visible");
   });
 
-  it("deve manter fluxo de login no mobile", () => {
+  it("Dado viewport mobile, Quando efetuar login com sucesso, Então deve ir para OTP", () => {
     cy.viewport(375, 667);
-    cy.visit("/auth/login");
+    loginPage.visit();
 
     cy.intercept("POST", "**/auth/login", {
       statusCode: 200,
@@ -188,20 +172,16 @@ describe("Auth - Login (Responsividade)", () => {
       },
     }).as("loginRequestMobile");
 
-    cy.fillLoginForm({
-      email: "murilo@ankatech.com.br",
-      password: "password",
-    });
-
-    cy.submitCurrentForm();
+    loginPage.fillCredentials(testUser);
+    loginPage.submit();
 
     cy.wait("@loginRequestMobile").its("response.statusCode").should("eq", 200);
     cy.url().should("include", "/auth/login/otp/456");
   });
 
-  it("deve concluir autenticação no mobile capturando OTP real do backend", () => {
+  it("Dado viewport mobile e challenge válido, Quando capturar e informar OTP real, Então deve autenticar", () => {
     cy.viewport(390, 844);
-    cy.visit("/auth/login");
+    loginPage.visit();
 
     cy.intercept("POST", "**/auth/login").as("loginMobileReal");
     cy.intercept("POST", "**/auth/otp/verify").as("verifyOtpMobileReal");
@@ -222,8 +202,8 @@ describe("Auth - Login (Responsividade)", () => {
       },
     }).as("getMeMobileReal");
 
-    cy.fillLoginForm(testUser);
-    cy.submitCurrentForm();
+    loginPage.fillCredentials(testUser);
+    loginPage.submit();
 
     cy.wait("@loginMobileReal").then(({ response }) => {
       expect(response?.statusCode).to.eq(200);
@@ -232,26 +212,26 @@ describe("Auth - Login (Responsividade)", () => {
 
       cy.task("getOtpCode", { challengeId }).then((otpCode) => {
         cy.url().should("include", `/auth/login/otp/${challengeId}`);
-        cy.fillOtpCode(String(otpCode));
-        cy.submitCurrentForm();
+        otpPage.fillCode(otpCode);
+        otpPage.submit();
 
         cy.wait("@verifyOtpMobileReal").its("response.statusCode").should("eq", 200);
         cy.wait("@getMeMobileReal").its("response.statusCode").should("eq", 200);
-        cy.url().should("include", "/home");
+        homePage.assertLoaded();
       });
     });
   });
 
-  it("deve realizar logout no mobile após login com OTP real", () => {
+  it("Dado usuário autenticado no mobile, Quando realizar logout, Então deve retornar ao login sem cookies", () => {
     cy.viewport(390, 844);
-    cy.visit("/auth/login");
+    loginPage.visit();
 
     cy.intercept("POST", "**/auth/login").as("loginMobileLogout");
     cy.intercept("POST", "**/auth/otp/verify").as("verifyOtpMobileLogout");
     cy.intercept("GET", "**/auth/me").as("getMeMobileLogout");
 
-    cy.fillLoginForm(testUser);
-    cy.submitCurrentForm();
+    loginPage.fillCredentials(testUser);
+    loginPage.submit();
 
     cy.wait("@loginMobileLogout").then(({ response }) => {
       expect(response?.statusCode).to.eq(200);
@@ -260,14 +240,14 @@ describe("Auth - Login (Responsividade)", () => {
 
       cy.task("getOtpCode", { challengeId }).then((otpCode) => {
         cy.url().should("include", `/auth/login/otp/${challengeId}`);
-        cy.fillOtpCode(String(otpCode));
-        cy.submitCurrentForm();
+        otpPage.fillCode(otpCode);
+        otpPage.submit();
 
         cy.wait("@verifyOtpMobileLogout").its("response.statusCode").should("eq", 200);
         cy.wait("@getMeMobileLogout").its("response.statusCode").should("eq", 200);
-        cy.url().should("include", "/home");
+        homePage.assertLoaded();
 
-        cy.contains("button", "Sair").should("be.visible").scrollIntoView().click({ force: true });
+        sidebarPage.clickLogoutMobile();
 
         cy.url().should("include", "/auth/login");
         cy.getCookie("token").should("not.exist");

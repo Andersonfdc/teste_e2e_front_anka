@@ -1,56 +1,51 @@
+import { homePage } from "../../support/pages/home.page";
+import { sidebarPage } from "../../support/pages/sidebar.page";
+import { usersPage } from "../../support/pages/users.page";
+
 const testUser = {
   email: "murilo@ankatech.com.br",
   password: "password",
 };
 
-describe("Private - Sidebar Navigation", () => {
+describe("Área Privada - Navegação Sidebar", () => {
   beforeEach(() => {
     cy.loginWithRealOtp(testUser);
-    cy.url().should("include", "/home");
-    cy.contains("Home").should("be.visible");
-    cy.contains(/Bem-vindo ao painel\.?/).should("be.visible");
+    homePage.assertLoaded();
   });
 
-  it("deve navegar entre Home e Usuários pelo sidebar", () => {
-    cy.get("aside").contains("Usuários").click({ force: true });
-    cy.url().should("include", "/users/active");
-    cy.contains("h1", "Usuários").should("be.visible");
-    cy.contains("Gestão de usuários").should("be.visible");
+  it("Dado usuário autenticado, Quando navegar no sidebar, Então deve alternar entre Home e Usuários", () => {
+    sidebarPage.clickUsers();
+    usersPage.assertActivePage();
 
-    cy.get('a[href="/users/inactive"]').first().click({ force: true });
-    cy.url().should("include", "/users/inactive");
+    usersPage.goToInactiveTab();
+    usersPage.goToActiveTab();
 
-    cy.get('a[href="/users/active"]').first().click({ force: true });
-    cy.url().should("include", "/users/active");
-
-    cy.get("aside").contains("Home").click({ force: true });
-    cy.url().should("include", "/home");
-    cy.contains(/Bem-vindo ao painel\.?/).should("be.visible");
+    sidebarPage.clickHome();
+    homePage.assertLoaded();
   });
 
-  it("deve alternar estado do sidebar e manter navegação funcional", () => {
+  it("Dado sidebar expandido, Quando colapsar e expandir novamente, Então a navegação deve continuar funcional", () => {
     cy.get("aside").within(() => {
       cy.contains("Usuários").should("be.visible");
     });
 
-    cy.get("aside").should("have.class", "w-[230px]");
-    cy.get('img[alt="Colapsar"]').click({ force: true });
-    cy.get("aside").should("have.class", "w-[70px]");
-    cy.get('img[alt="Expandir"]').should("be.visible");
+    sidebarPage.assertExpanded();
+    sidebarPage.collapse();
+    sidebarPage.assertCollapsed();
 
-    cy.get('img[alt="Expandir"]').click({ force: true });
-    cy.get("aside").should("have.class", "w-[230px]");
+    sidebarPage.expand();
+    sidebarPage.assertExpanded();
     cy.get("aside").contains("Usuários").should("be.visible");
 
-    cy.get("aside").contains("Usuários").click({ force: true });
-    cy.url().should("include", "/users/active");
+    sidebarPage.clickUsers();
+    usersPage.assertActivePage();
   });
 
-  it("deve atender validações não funcionais de navegação (latência e estabilidade)", () => {
+  it("Dado ambiente estável, Quando navegar para Usuários, Então deve atender critérios de latência e estabilidade", () => {
     const navigationStart = Date.now();
 
-    cy.get("aside").contains("Usuários").click({ force: true });
-    cy.url().should("include", "/users/active");
+    sidebarPage.clickUsers();
+    usersPage.assertActivePage();
 
     const navigationElapsed = Date.now() - navigationStart;
     expect(navigationElapsed).to.be.lessThan(4000);

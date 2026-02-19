@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:e2e": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run",
-    "test:e2e": "start-server-and-test dev http://localhost:3000 cypress:run",
+    "cypress:run:e2e": "cypress run --config baseUrl=http://localhost:3001",
+    "test:e2e": "start-server-and-test dev:e2e http://localhost:3001 cypress:run:e2e",
     "lint": "biome check",
     "format": "biome format --write"
   },
